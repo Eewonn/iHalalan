@@ -1,20 +1,23 @@
-import { createClient } from '@/lib/supabase-server'
+import { electionsCollection, voterTokensCollection } from '@/lib/mongo-collections'
 import { Election } from '@/lib/types'
 import Link from 'next/link'
 
 export default async function AdminDashboard() {
-  const supabase = await createClient()
-  const { data: elections } = await supabase
-    .from('elections')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const [elections, voterTokens] = await Promise.all([
+    electionsCollection(),
+    voterTokensCollection(),
+  ])
 
-  const { data: allTokens } = await supabase
-    .from('voter_tokens')
-    .select('used')
+  const electionDocs = await elections.find({}).sort({ created_at: -1 }).toArray()
+  const electionList: Election[] = electionDocs.map((d) => ({
+    id: d._id,
+    title: d.title,
+    status: d.status,
+    created_at: d.created_at,
+  }))
 
-  const totalParticipated = allTokens?.filter((t) => t.used).length ?? 0
-  const activeCount = elections?.filter((e) => e.status === 'voting').length ?? 0
+  const totalParticipated = await voterTokens.countDocuments({ used: true })
+  const activeCount = electionList.filter((e) => e.status === 'voting').length
 
   const statusConfig = (status: string) => {
     if (status === 'setup') return { label: 'Setup', bg: 'bg-[#fdeee4]', text: 'text-[#a0522d]' }
@@ -92,17 +95,17 @@ export default async function AdminDashboard() {
           </div>
           <p className="section-label mb-1">Total Elections</p>
           <p className="font-display text-3xl font-semibold text-[#0a3d52]">
-            {String(elections?.length ?? 0).padStart(2, '0')}
+            {String(electionList.length).padStart(2, '0')}
           </p>
         </div>
       </div>
 
       {/* Elections list */}
-      {!!elections?.length && (
+      {electionList.length > 0 && (
         <div>
           <p className="section-label mb-3 mt-2">All Elections</p>
           <div className="space-y-2">
-            {(elections as Election[]).map((election) => {
+            {electionList.map((election) => {
               const { label, bg, text } = statusConfig(election.status)
               return (
                 <Link
@@ -128,7 +131,7 @@ export default async function AdminDashboard() {
         </div>
       )}
 
-      {!elections?.length && (
+      {electionList.length === 0 && (
         <div className="card p-10 text-center">
           <div className="w-12 h-12 bg-[#f0efec] rounded-xl flex items-center justify-center mx-auto mb-4">
             <svg className="w-6 h-6 text-[#9ca3af]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">

@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
 import { ElectionWithPositions, Vote, VoterToken } from '@/lib/types'
 import { closeVoting } from '@/app/admin/[electionId]/actions'
 import { cn } from '@/lib/utils'
@@ -55,16 +54,13 @@ export default function ResultsClient({
 
   useEffect(() => {
     if (!isLive) return
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`results-${election.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'votes', filter: `election_id=eq.${election.id}` }, (payload) => {
-        const vote = payload.new as Vote
-        setCounts((prev) => ({ ...prev, [vote.nominee_id]: (prev[vote.nominee_id] || 0) + 1 }))
-        setBallotsSubmitted((prev) => prev + 1 / election.positions.length)
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    const source = new EventSource(`/api/results/${election.id}/stream`)
+    source.onmessage = (e) => {
+      const vote = JSON.parse(e.data) as Vote
+      setCounts((prev) => ({ ...prev, [vote.nominee_id]: (prev[vote.nominee_id] || 0) + 1 }))
+      setBallotsSubmitted((prev) => prev + 1 / election.positions.length)
+    }
+    return () => source.close()
   }, [election.id, election.positions.length, isLive])
 
   const roundedBallots = Math.round(ballotsSubmitted)

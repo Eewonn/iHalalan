@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase-server'
 import { notFound } from 'next/navigation'
 import { ElectionWithPositions, VoterToken, Vote } from '@/lib/types'
 import ResultsClient from '@/components/results/ResultsClient'
 import Link from 'next/link'
 import { ArrowLeft, Settings } from 'lucide-react'
+import { electionsCollection, voterTokensCollection, votesCollection } from '@/lib/mongo-collections'
 
 export default async function ResultsPage({
   params,
@@ -11,37 +11,39 @@ export default async function ResultsPage({
   params: Promise<{ electionId: string }>
 }) {
   const { electionId } = await params
-  const supabase = await createClient()
 
-  const { data: election } = await supabase
-    .from('elections')
-    .select(`*, positions(*, nominees(*))`)
-    .eq('id', electionId)
-    .order('sort_order', { referencedTable: 'positions' })
-    .single()
+  const [elections, voterTokens, votes] = await Promise.all([
+    electionsCollection(),
+    voterTokensCollection(),
+    votesCollection(),
+  ])
 
-  if (!election) notFound()
+  const electionDoc = await elections.findOne({ _id: electionId })
+  if (!electionDoc) notFound()
 
-  const { data: votes } = await supabase
-    .from('votes')
-    .select('*')
-    .eq('election_id', electionId)
+  const [voteDocs, tokenDocs] = await Promise.all([
+    votes.find({ election_id: electionId }).toArray(),
+    voterTokens.find({ election_id: electionId }, { projection: { _id: 1, used: 1 } }).toArray(),
+  ])
 
-  const { data: tokens } = await supabase
-    .from('voter_tokens')
-    .select('id, used')
-    .eq('election_id', electionId)
-
-  // Sort nominees by created_at
-  const electionData = {
-    ...election,
-    positions: election.positions.map((p: { nominees: { created_at: string }[] }) => ({
+  const electionData: ElectionWithPositions = {
+    id: electionDoc._id,
+    title: electionDoc.title,
+    status: electionDoc.status,
+    created_at: electionDoc.created_at,
+    positions: electionDoc.positions.map((p) => ({
       ...p,
       nominees: [...p.nominees].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       ),
     })),
-  } as ElectionWithPositions
+  }
+
+  const initialVotes: Vote[] = voteDocs.map((v) => ({ ...v, id: v._id }))
+  const tokens: Pick<VoterToken, 'id' | 'used'>[] = tokenDocs.map((t) => ({
+    id: t._id,
+    used: t.used,
+  }))
 
   return (
     <div>
@@ -58,8 +60,8 @@ export default async function ResultsPage({
 
       <ResultsClient
         election={electionData}
-        initialVotes={(votes as Vote[]) ?? []}
-        tokens={(tokens as Pick<VoterToken, 'id' | 'used'>[]) ?? []}
+        initialVotes={initialVotes}
+        tokens={tokens}
       />
     </div>
   )
