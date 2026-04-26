@@ -45,6 +45,10 @@ export async function submitBallot(
   const db = client.db(process.env.MONGODB_DB!)
   const session = client.startSession()
 
+  if (selections.length !== 15) {
+    return { error: 'You must select exactly 15 candidates.' }
+  }
+
   const messages: Record<string, string> = {
     invalid_token: 'Invalid token.',
     token_used: 'This token has already been used.',

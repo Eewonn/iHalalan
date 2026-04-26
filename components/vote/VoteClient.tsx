@@ -208,7 +208,7 @@ function BallotForm({
     })
   }
 
-  const canSubmit = selected.size > 0
+  const canSubmit = selected.size === limit
 
   return (
     <div className="pb-32">
@@ -218,11 +218,11 @@ function BallotForm({
       {/* Selection counter */}
       <div className="flex items-center justify-between mb-5">
         <p className="text-sm text-[#6b7280]">
-          Select up to <span className="font-semibold text-[#0a3d52]">{limit}</span> candidates
+          Select exactly <span className="font-semibold text-[#0a3d52]">{limit}</span> candidates
         </p>
         <span className={cn(
           'text-sm font-semibold px-3 py-1 rounded-full',
-          selected.size === limit ? 'bg-[#e0f0e8] text-[#1a6b3a]' : 'bg-[#e8f0f4] text-[#0a3d52]'
+          selected.size === limit ? 'bg-[#e0f0e8] text-[#1a6b3a]' : 'bg-[#fdeee4] text-[#a0522d]'
         )}>
           {selected.size} / {limit}
         </span>
