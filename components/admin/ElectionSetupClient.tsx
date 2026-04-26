@@ -48,6 +48,46 @@ function AddCandidateInput({ electionId, onAdd }: { electionId: string; onAdd: (
   )
 }
 
+// ── Confirm Delete Modal ──────────────────────────────────────────
+
+function ConfirmDeleteModal({
+  title, body, confirmLabel = 'Delete', onConfirm, onClose,
+}: {
+  title: string
+  body: string
+  confirmLabel?: string
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 bg-[#0a3d52]/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-[#f0efec] rounded-t-2xl sm:rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center">
+            <Trash2 className="w-5 h-5 text-[#c0392b]" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-[#1a1a1a]">{title}</h3>
+            <p className="text-xs text-[#9ca3af]">This cannot be undone</p>
+          </div>
+        </div>
+        <p className="text-sm text-[#6b7280] mb-5 leading-relaxed">{body}</p>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-3 border border-[#e4e2dd] text-[#6b7280] hover:bg-[#e8e6e1] font-medium rounded-lg transition-colors text-sm">
+            Cancel
+          </button>
+          <button
+            onClick={() => { onConfirm(); onClose() }}
+            className="flex-1 py-3 bg-[#c0392b] hover:bg-[#a93226] text-white font-semibold rounded-lg transition-colors text-sm"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Open Voting Modal ─────────────────────────────────────────────
 
 function OpenVotingModal({ electionId, onClose }: { electionId: string; onClose: () => void }) {
@@ -194,6 +234,9 @@ export default function ElectionSetupClient({
 }) {
   const [candidates, setCandidates] = useState(election.candidates)
   const [showOpenModal, setShowOpenModal] = useState(false)
+  const [showDeleteElection, setShowDeleteElection] = useState(false)
+  const [showCloseVoting, setShowCloseVoting] = useState(false)
+  const [removeCandidateId, setRemoveCandidateId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
   useEffect(() => { setCandidates(election.candidates) }, [election.candidates])
@@ -227,7 +270,7 @@ export default function ElectionSetupClient({
           </p>
         </div>
         <button
-          onClick={() => { if (confirm('Delete this election? This cannot be undone.')) startTransition(async () => deleteElection(election.id)) }}
+          onClick={() => setShowDeleteElection(true)}
           className="p-1.5 text-[#c0bdb8] hover:text-[#c0392b] rounded-lg transition-colors flex-shrink-0"
         >
           <Trash2 className="w-4 h-4" />
@@ -266,10 +309,7 @@ export default function ElectionSetupClient({
                   <span className="text-xs font-mono text-[#c0bdb8] w-5 text-right flex-shrink-0">{idx + 1}</span>
                   <span className="flex-1 text-sm text-[#1a1a1a]">{c.name}</span>
                   <button
-                    onClick={() => {
-                      setCandidates((prev) => prev.filter((x) => x.id !== c.id))
-                      startTransition(async () => removeCandidate(c.id, election.id))
-                    }}
+                    onClick={() => setRemoveCandidateId(c.id)}
                     className="opacity-0 group-hover:opacity-100 p-1 text-[#c0bdb8] hover:text-[#c0392b] rounded transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -321,7 +361,7 @@ export default function ElectionSetupClient({
               View Live Results
             </a>
             <button
-              onClick={() => { if (confirm('Close voting? Results will be final.')) startTransition(async () => closeVoting(election.id)) }}
+              onClick={() => setShowCloseVoting(true)}
               className="w-full py-3 border border-[#e4e2dd] text-[#6b7280] hover:bg-[#e8e6e1] font-medium rounded-xl transition-colors text-sm"
             >
               Close Voting
@@ -337,6 +377,42 @@ export default function ElectionSetupClient({
       </div>
 
       {showOpenModal && <OpenVotingModal electionId={election.id} onClose={() => setShowOpenModal(false)} />}
+
+      {showDeleteElection && (
+        <ConfirmDeleteModal
+          title="Delete Election"
+          body={`"${election.title}" and all its data will be permanently deleted.`}
+          confirmLabel="Delete Election"
+          onConfirm={() => startTransition(async () => deleteElection(election.id))}
+          onClose={() => setShowDeleteElection(false)}
+        />
+      )}
+
+      {removeCandidateId && (() => {
+        const candidate = candidates.find((c) => c.id === removeCandidateId)
+        return (
+          <ConfirmDeleteModal
+            title="Remove Candidate"
+            body={`"${candidate?.name}" will be removed from the ballot.`}
+            confirmLabel="Remove"
+            onConfirm={() => {
+              setCandidates((prev) => prev.filter((x) => x.id !== removeCandidateId))
+              startTransition(async () => removeCandidate(removeCandidateId, election.id))
+            }}
+            onClose={() => setRemoveCandidateId(null)}
+          />
+        )
+      })()}
+
+      {showCloseVoting && (
+        <ConfirmDeleteModal
+          title="Close Voting"
+          body="Voting will be permanently closed. Results will be final and no more ballots can be submitted."
+          confirmLabel="Close Voting"
+          onConfirm={() => startTransition(async () => closeVoting(election.id))}
+          onClose={() => setShowCloseVoting(false)}
+        />
+      )}
     </div>
   )
 }
