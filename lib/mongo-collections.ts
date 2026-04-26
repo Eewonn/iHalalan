@@ -1,13 +1,10 @@
 import { Collection, WithId } from 'mongodb'
 import { getDb } from './mongo'
-import { Election, VoterToken, Vote, PositionWithNominees } from './types'
+import { Election, VoterToken, Vote } from './types'
 
-// Document shapes stored in MongoDB (use _id as the UUID string)
 export type ElectionDoc = Omit<Election, 'id'> & {
   _id: string
-  positions: (Omit<PositionWithNominees, 'nominees'> & {
-    nominees: Array<{ id: string; position_id: string; name: string; created_at: string }>
-  })[]
+  candidates: Array<{ id: string; election_id: string; name: string; created_at: string }>
 }
 
 export type VoterTokenDoc = Omit<VoterToken, 'id'> & { _id: string }
@@ -28,7 +25,6 @@ export async function votesCollection(): Promise<Collection<VoteDoc>> {
   return db.collection<VoteDoc>('votes')
 }
 
-// Convert a MongoDB doc (with _id) to our app type (with id)
 export function toRecord<T>(doc: WithId<T & { _id: string }> | null): (T & { id: string }) | null {
   if (!doc) return null
   const { _id, ...rest } = doc as unknown as Record<string, unknown>

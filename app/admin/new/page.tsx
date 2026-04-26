@@ -15,7 +15,7 @@ async function createElection(formData: FormData) {
     title,
     status: 'setup',
     created_at: new Date().toISOString(),
-    positions: [],
+    candidates: [],
   })
 
   redirect(`/admin/${id}`)

@@ -5,9 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Generate a random 6-digit numeric token */
+/** Generate a random 9-digit numeric token */
 export function generateToken(): string {
-  return String(Math.floor(100000 + Math.random() * 900000))
+  return String(Math.floor(100000000 + Math.random() * 900000000))
 }
 
 /** Generate N unique tokens */

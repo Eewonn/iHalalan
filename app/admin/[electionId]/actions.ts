@@ -6,72 +6,27 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'crypto'
 
-// ── Position actions ─────────────────────────────────────────────
-
-export async function addPosition(electionId: string, title: string) {
+export async function addCandidate(electionId: string, name: string) {
   const elections = await electionsCollection()
-  const election = await elections.findOne({ _id: electionId }, { projection: { positions: 1 } })
-  const sortOrder = election?.positions?.length ?? 0
-
-  const newPos = {
+  const candidate = {
     id: randomUUID(),
     election_id: electionId,
-    title,
-    sort_order: sortOrder,
-    created_at: new Date().toISOString(),
-    nominees: [] as never[],
-  }
-
-  await elections.updateOne({ _id: electionId }, { $push: { positions: newPos } })
-  revalidatePath(`/admin/${electionId}`)
-  return newPos
-}
-
-export async function updatePositionTitle(positionId: string, electionId: string, title: string) {
-  const elections = await electionsCollection()
-  await elections.updateOne(
-    { _id: electionId, 'positions.id': positionId },
-    { $set: { 'positions.$.title': title } }
-  )
-  revalidatePath(`/admin/${electionId}`)
-}
-
-export async function removePosition(positionId: string, electionId: string) {
-  const elections = await electionsCollection()
-  await elections.updateOne(
-    { _id: electionId },
-    { $pull: { positions: { id: positionId } } }
-  )
-  revalidatePath(`/admin/${electionId}`)
-}
-
-// ── Nominee actions ──────────────────────────────────────────────
-
-export async function addNominee(positionId: string, electionId: string, name: string) {
-  const elections = await electionsCollection()
-  const nominee = {
-    id: randomUUID(),
-    position_id: positionId,
     name,
     created_at: new Date().toISOString(),
   }
-  await elections.updateOne(
-    { _id: electionId, 'positions.id': positionId },
-    { $push: { 'positions.$.nominees': nominee } }
-  )
+  await elections.updateOne({ _id: electionId }, { $push: { candidates: candidate } })
   revalidatePath(`/admin/${electionId}`)
+  return candidate
 }
 
-export async function removeNominee(nomineeId: string, electionId: string) {
+export async function removeCandidate(candidateId: string, electionId: string) {
   const elections = await electionsCollection()
   await elections.updateOne(
     { _id: electionId },
-    { $pull: { 'positions.$[].nominees': { id: nomineeId } } }
+    { $pull: { candidates: { id: candidateId } } }
   )
   revalidatePath(`/admin/${electionId}`)
 }
-
-// ── Voting lifecycle ─────────────────────────────────────────────
 
 export async function openVoting(electionId: string, tokenCount: number) {
   if (tokenCount < 1 || tokenCount > 500) return { error: 'Token count must be between 1 and 500' }

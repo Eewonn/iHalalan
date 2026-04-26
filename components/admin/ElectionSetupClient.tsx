@@ -1,38 +1,18 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import { ElectionWithPositions, PositionWithNominees, VoterToken } from '@/lib/types'
+import { ElectionWithCandidates, Candidate, VoterToken } from '@/lib/types'
 import {
-  addPosition, updatePositionTitle, removePosition,
-  addNominee, removeNominee,
+  addCandidate, removeCandidate,
   openVoting, generateMoreTokens, closeVoting, deleteElection,
 } from '@/app/admin/[electionId]/actions'
 import QRCodeDisplay from './QRCodeDisplay'
 import { cn } from '@/lib/utils'
-import { Plus, Trash2, ChevronDown, ChevronUp, Eye, ExternalLink, Copy, Check } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, ExternalLink, Copy, Check } from 'lucide-react'
 
-// ── Nominee Row ───────────────────────────────────────────────────
+// ── Add Candidate Input ───────────────────────────────────────────
 
-function NomineeRow({ name, onRemove, disabled }: { name: string; onRemove: () => void; disabled: boolean }) {
-  return (
-    <div className="flex items-center gap-2 py-2 group">
-      <div className="w-1.5 h-1.5 rounded-full bg-[#c0bdb8] flex-shrink-0" />
-      <span className="flex-1 text-sm text-[#1a1a1a]">{name}</span>
-      {!disabled && (
-        <button
-          onClick={onRemove}
-          className="opacity-0 group-hover:opacity-100 p-1 text-[#c0bdb8] hover:text-[#c0392b] rounded transition-all"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  )
-}
-
-// ── Add Nominee Input ─────────────────────────────────────────────
-
-function AddNomineeInput({ positionId, electionId, onAdd }: { positionId: string; electionId: string; onAdd: (name: string) => void }) {
+function AddCandidateInput({ electionId, onAdd }: { electionId: string; onAdd: (c: Candidate) => void }) {
   const [name, setName] = useState('')
   const [pending, startTransition] = useTransition()
 
@@ -40,19 +20,19 @@ function AddNomineeInput({ positionId, electionId, onAdd }: { positionId: string
     const trimmed = name.trim()
     if (!trimmed) return
     startTransition(async () => {
-      await addNominee(positionId, electionId, trimmed)
-      onAdd(trimmed)
+      const c = await addCandidate(electionId, trimmed)
+      if (c) onAdd(c)
       setName('')
     })
   }
 
   return (
-    <div className="flex gap-2 mt-3 pt-3 border-t border-[#f0efec]">
+    <div className="flex gap-2 pt-3 border-t border-[#f0efec]">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
-        placeholder="Nominee name"
+        placeholder="Candidate name"
         disabled={pending}
         className="flex-1 px-3 py-2 text-sm rounded-lg border border-[#e4e2dd] bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20 focus:border-[#0a3d52] disabled:opacity-50 placeholder:text-[#c0bdb8]"
       />
@@ -64,96 +44,6 @@ function AddNomineeInput({ positionId, electionId, onAdd }: { positionId: string
         <Plus className="w-3.5 h-3.5" />
         Add
       </button>
-    </div>
-  )
-}
-
-// ── Position Card ─────────────────────────────────────────────────
-
-function PositionCard({ position, electionId, disabled, onRemovePosition, onAddNominee, onRemoveNominee }: {
-  position: PositionWithNominees
-  electionId: string
-  disabled: boolean
-  onRemovePosition: (id: string) => void
-  onAddNominee: (positionId: string, name: string) => void
-  onRemoveNominee: (nomineeId: string, positionId: string) => void
-}) {
-  const [title, setTitle] = useState(position.title)
-  const [editing, setEditing] = useState(false)
-  const [, startTransition] = useTransition()
-
-  const saveTitle = () => {
-    const trimmed = title.trim()
-    if (!trimmed || trimmed === position.title) { setEditing(false); return }
-    startTransition(async () => { await updatePositionTitle(position.id, electionId, trimmed); setEditing(false) })
-  }
-
-  return (
-    <div className="card p-4">
-      <div className="flex items-start gap-3 mb-2">
-        <div className="flex-1">
-          {editing && !disabled ? (
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') { setTitle(position.title); setEditing(false) } }}
-              autoFocus
-              className="w-full font-semibold text-[#0a3d52] bg-transparent border-b-2 border-[#0a3d52] focus:outline-none pb-0.5"
-            />
-          ) : (
-            <button
-              onClick={() => !disabled && setEditing(true)}
-              className={cn('font-semibold text-[#0a3d52] text-left font-display text-base', !disabled && 'hover:opacity-70 transition-opacity')}
-            >
-              {position.title}
-            </button>
-          )}
-          <p className="text-xs text-[#9ca3af] mt-0.5">
-            {position.nominees.length} nominee{position.nominees.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        {!disabled && (
-          <button onClick={() => onRemovePosition(position.id)} className="p-1.5 text-[#c0bdb8] hover:text-[#c0392b] rounded-lg transition-colors">
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="divide-y divide-[#f5f4f1]">
-        {position.nominees.map((nominee) => (
-          <NomineeRow key={nominee.id} name={nominee.name} disabled={disabled} onRemove={() => onRemoveNominee(nominee.id, position.id)} />
-        ))}
-      </div>
-
-      {!disabled && (
-        <AddNomineeInput positionId={position.id} electionId={electionId} onAdd={(name) => onAddNominee(position.id, name)} />
-      )}
-    </div>
-  )
-}
-
-// ── Ballot Preview ────────────────────────────────────────────────
-
-function BallotPreview({ election }: { election: ElectionWithPositions }) {
-  return (
-    <div className="card p-5 border border-[#e4e2dd]">
-      <p className="section-label mb-1">Ballot Preview</p>
-      <h3 className="font-display text-lg font-semibold text-[#0a3d52] mb-4">{election.title}</h3>
-      {election.positions.map((pos) => (
-        <div key={pos.id} className="mb-4 last:mb-0">
-          <p className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wider mb-2">{pos.title}</p>
-          <div className="space-y-1.5">
-            {pos.nominees.map((n) => (
-              <div key={n.id} className="flex items-center gap-2.5 px-3 py-2.5 bg-[#f5f4f1] rounded-lg">
-                <div className="w-4 h-4 rounded-full border-2 border-[#c0bdb8] flex-shrink-0" />
-                <span className="text-sm text-[#1a1a1a]">{n.name}</span>
-              </div>
-            ))}
-            {pos.nominees.length === 0 && <p className="text-sm text-[#c0bdb8] italic px-3">No nominees yet</p>}
-          </div>
-        </div>
-      ))}
     </div>
   )
 }
@@ -176,7 +66,7 @@ function OpenVotingModal({ electionId, onClose }: { electionId: string; onClose:
           </div>
           <div>
             <h3 className="font-semibold text-[#1a1a1a]">Open Voting</h3>
-            <p className="text-xs text-[#9ca3af]">This locks the ballot permanently</p>
+            <p className="text-xs text-[#9ca3af]">This locks the candidate list permanently</p>
           </div>
         </div>
 
@@ -244,7 +134,6 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
         </button>
       </div>
 
-      {/* Progress */}
       <div className="mb-4">
         <div className="h-1.5 bg-[#e4e2dd] rounded-full overflow-hidden">
           <div
@@ -255,7 +144,6 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
         <p className="text-xs text-[#9ca3af] mt-1">{tokens.length - usedCount} tokens remaining</p>
       </div>
 
-      {/* Token grid */}
       <div className="grid grid-cols-4 gap-1.5 mb-3">
         {displayed.map((t) => (
           <span
@@ -277,7 +165,6 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
         </button>
       )}
 
-      {/* Generate more */}
       <div className="border-t border-[#f0efec] pt-4 flex gap-2 items-center">
         <input
           type="number" min={1} max={200} value={addCount}
@@ -302,26 +189,23 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
 export default function ElectionSetupClient({
   election, tokens,
 }: {
-  election: ElectionWithPositions
+  election: ElectionWithCandidates
   tokens: VoterToken[]
 }) {
-  const [positions, setPositions] = useState(election.positions)
-  const [showPreview, setShowPreview] = useState(false)
-
-  // Sync when server re-delivers props after revalidatePath
-  useEffect(() => { setPositions(election.positions) }, [election.positions])
+  const [candidates, setCandidates] = useState(election.candidates)
   const [showOpenModal, setShowOpenModal] = useState(false)
   const [, startTransition] = useTransition()
+
+  useEffect(() => { setCandidates(election.candidates) }, [election.candidates])
 
   const isSetup = election.status === 'setup'
   const isVoting = election.status === 'voting'
   const isClosed = election.status === 'closed'
 
-  const voterUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/vote/${election.id}`
-    : `/vote/${election.id}`
-
-  const canOpenVoting = positions.length > 0 && positions.every((p) => p.nominees.length >= 1)
+  const [voterUrl, setVoterUrl] = useState(`/vote/${election.id}`)
+  useEffect(() => {
+    setVoterUrl(`${window.location.origin}/vote/${election.id}`)
+  }, [election.id])
 
   const statusBadge = {
     setup: <span className="px-2.5 py-1 bg-[#fdeee4] text-[#a0522d] text-xs font-semibold rounded-full">Setup</span>,
@@ -339,8 +223,7 @@ export default function ElectionSetupClient({
             {statusBadge}
           </div>
           <p className="text-xs text-[#9ca3af]">
-            {positions.length} position{positions.length !== 1 ? 's' : ''} &middot;{' '}
-            {positions.reduce((a, p) => a + p.nominees.length, 0)} nominees
+            {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
@@ -369,65 +252,37 @@ export default function ElectionSetupClient({
         </div>
       )}
 
-      {/* Positions */}
-      {(isSetup || showPreview) && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="section-label">Positions</p>
-            {isSetup && (
-              <button
-                onClick={() => startTransition(async () => {
-                const newPos = await addPosition(election.id, `Position ${positions.length + 1}`)
-                if (newPos) setPositions((prev) => [...prev, { ...newPos, nominees: [] }])
-              })}
-                className="text-xs font-medium text-[#0a3d52] hover:bg-[#e8f0f4] flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Position
-              </button>
-            )}
-          </div>
+      {/* Candidates (setup only) */}
+      {isSetup && (
+        <div className="card p-5">
+          <p className="section-label mb-3">Candidates</p>
 
-          {positions.length === 0 ? (
-            <div className="card p-10 text-center border-2 border-dashed border-[#e4e2dd]">
-              <p className="text-[#9ca3af] text-sm mb-3">No positions yet</p>
-              {isSetup && (
-                <button
-                  onClick={() => startTransition(async () => {
-                    const newPos = await addPosition(election.id, 'Position 1')
-                    if (newPos) setPositions((prev) => [...prev, { ...newPos, nominees: [] }])
-                  })}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0a3d52] hover:bg-[#072e3d] text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add First Position
-                </button>
-              )}
-            </div>
+          {candidates.length === 0 ? (
+            <p className="text-sm text-[#9ca3af] italic mb-3">No candidates yet. Add names below.</p>
           ) : (
-            positions.map((pos) => (
-              <PositionCard
-                key={pos.id}
-                position={pos}
-                electionId={election.id}
-                disabled={!isSetup}
-                onRemovePosition={(id) => { setPositions((prev) => prev.filter((p) => p.id !== id)); startTransition(async () => removePosition(id, election.id)) }}
-                onAddNominee={(posId, name) => setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, nominees: [...p.nominees, { id: `tmp-${Date.now()}`, position_id: posId, name, created_at: new Date().toISOString() }] } : p))}
-                onRemoveNominee={(nId, posId) => { setPositions((prev) => prev.map((p) => p.id === posId ? { ...p, nominees: p.nominees.filter((n) => n.id !== nId) } : p)); startTransition(async () => removeNominee(nId, election.id)) }}
-              />
-            ))
+            <div className="divide-y divide-[#f5f4f1] mb-3">
+              {candidates.map((c, idx) => (
+                <div key={c.id} className="flex items-center gap-3 py-2.5 group">
+                  <span className="text-xs font-mono text-[#c0bdb8] w-5 text-right flex-shrink-0">{idx + 1}</span>
+                  <span className="flex-1 text-sm text-[#1a1a1a]">{c.name}</span>
+                  <button
+                    onClick={() => {
+                      setCandidates((prev) => prev.filter((x) => x.id !== c.id))
+                      startTransition(async () => removeCandidate(c.id, election.id))
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-[#c0bdb8] hover:text-[#c0392b] rounded transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Preview toggle */}
-      {isSetup && positions.length > 0 && (
-        <div>
-          <button onClick={() => setShowPreview(!showPreview)} className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#0a3d52] transition-colors">
-            <Eye className="w-4 h-4" />
-            {showPreview ? 'Hide' : 'Preview'} Ballot
-          </button>
-          {showPreview && <div className="mt-3"><BallotPreview election={{ ...election, positions }} /></div>}
+          <AddCandidateInput
+            electionId={election.id}
+            onAdd={(c) => setCandidates((prev) => [...prev, c])}
+          />
         </div>
       )}
 
@@ -440,10 +295,10 @@ export default function ElectionSetupClient({
           <>
             <button
               onClick={() => setShowOpenModal(true)}
-              disabled={!canOpenVoting}
+              disabled={candidates.length === 0}
               className={cn(
                 'w-full py-3.5 font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 text-sm',
-                canOpenVoting ? 'bg-[#0a3d52] hover:bg-[#072e3d] text-white' : 'bg-[#e8e6e1] text-[#c0bdb8] cursor-not-allowed'
+                candidates.length > 0 ? 'bg-[#0a3d52] hover:bg-[#072e3d] text-white' : 'bg-[#e8e6e1] text-[#c0bdb8] cursor-not-allowed'
               )}
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -451,8 +306,8 @@ export default function ElectionSetupClient({
               </svg>
               Open Voting
             </button>
-            {!canOpenVoting && positions.length > 0 && (
-              <p className="text-xs text-[#a0522d] text-center">Each position needs at least one nominee.</p>
+            {candidates.length === 0 && (
+              <p className="text-xs text-[#a0522d] text-center">Add at least one candidate to open voting.</p>
             )}
           </>
         )}
