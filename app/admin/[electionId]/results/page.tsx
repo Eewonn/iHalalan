@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { ElectionWithPositions, VoterToken, Vote } from '@/lib/types'
+import { ElectionWithNominees, VoterToken, Vote } from '@/lib/types'
 import ResultsClient from '@/components/results/ResultsClient'
 import Link from 'next/link'
 import { ArrowLeft, Settings } from 'lucide-react'
@@ -26,17 +26,12 @@ export default async function ResultsPage({
     voterTokens.find({ election_id: electionId }, { projection: { _id: 1, used: 1 } }).toArray(),
   ])
 
-  const electionData: ElectionWithPositions = {
+  const electionData: ElectionWithNominees = {
     id: electionDoc._id,
     title: electionDoc.title,
     status: electionDoc.status,
     created_at: electionDoc.created_at,
-    positions: electionDoc.positions.map((p) => ({
-      ...p,
-      nominees: [...p.nominees].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ),
-    })),
+    nominees: [...electionDoc.nominees].sort((a, b) => a.sort_order - b.sort_order),
   }
 
   const initialVotes: Vote[] = voteDocs.map((v) => ({ ...v, id: v._id }))

@@ -1,14 +1,14 @@
 'use server'
 
-import { electionsCollection, voterTokensCollection, votesCollection, VoterTokenDoc, VoteDoc } from '@/lib/mongo-collections'
+import { electionsCollection, voterTokensCollection, VoterTokenDoc, VoteDoc } from '@/lib/mongo-collections'
 import { getClient } from '@/lib/mongo'
-import { ElectionWithPositions, BallotSelection } from '@/lib/types'
+import { ElectionWithNominees, BallotSelection } from '@/lib/types'
 import { randomUUID } from 'crypto'
 
 export async function validateToken(
   electionId: string,
   token: string
-): Promise<{ error?: string; ballot?: ElectionWithPositions }> {
+): Promise<{ error?: string; ballot?: ElectionWithNominees }> {
   const elections = await electionsCollection()
   const voterTokens = await voterTokensCollection()
 
@@ -24,17 +24,12 @@ export async function validateToken(
   if (!tokenRow) return { error: 'Invalid token. Check your slip and try again.' }
   if (tokenRow.used) return { error: 'This token has already been used.' }
 
-  const ballot: ElectionWithPositions = {
+  const ballot: ElectionWithNominees = {
     id: electionDoc._id,
     title: electionDoc.title,
     status: electionDoc.status,
     created_at: electionDoc.created_at,
-    positions: electionDoc.positions.map((p) => ({
-      ...p,
-      nominees: [...p.nominees].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ),
-    })),
+    nominees: [...electionDoc.nominees].sort((a, b) => a.sort_order - b.sort_order),
   }
 
   return { ballot }
@@ -76,7 +71,6 @@ export async function submitBallot(
           _id: randomUUID(),
           token_id: tokenDoc._id,
           election_id: tokenDoc.election_id,
-          position_id: sel.position_id,
           nominee_id: sel.nominee_id,
           submitted_at: now,
         })),

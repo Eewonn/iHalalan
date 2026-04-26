@@ -6,67 +6,31 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'crypto'
 
-// ── Position actions ─────────────────────────────────────────────
-
-export async function addPosition(electionId: string, title: string) {
-  const elections = await electionsCollection()
-  const election = await elections.findOne({ _id: electionId }, { projection: { positions: 1 } })
-  const sortOrder = election?.positions?.length ?? 0
-
-  const newPos = {
-    id: randomUUID(),
-    election_id: electionId,
-    title,
-    sort_order: sortOrder,
-    created_at: new Date().toISOString(),
-    nominees: [] as never[],
-  }
-
-  await elections.updateOne({ _id: electionId }, { $push: { positions: newPos } })
-  revalidatePath(`/admin/${electionId}`)
-  return newPos
-}
-
-export async function updatePositionTitle(positionId: string, electionId: string, title: string) {
-  const elections = await electionsCollection()
-  await elections.updateOne(
-    { _id: electionId, 'positions.id': positionId },
-    { $set: { 'positions.$.title': title } }
-  )
-  revalidatePath(`/admin/${electionId}`)
-}
-
-export async function removePosition(positionId: string, electionId: string) {
-  const elections = await electionsCollection()
-  await elections.updateOne(
-    { _id: electionId },
-    { $pull: { positions: { id: positionId } } }
-  )
-  revalidatePath(`/admin/${electionId}`)
-}
-
 // ── Nominee actions ──────────────────────────────────────────────
 
-export async function addNominee(positionId: string, electionId: string, name: string) {
+export async function addNominee(electionId: string, name: string) {
   const elections = await electionsCollection()
+  const election = await elections.findOne({ _id: electionId }, { projection: { nominees: 1 } })
+  const sortOrder = election?.nominees?.length ?? 0
+
   const nominee = {
     id: randomUUID(),
-    position_id: positionId,
+    election_id: electionId,
     name,
+    sort_order: sortOrder,
     created_at: new Date().toISOString(),
   }
-  await elections.updateOne(
-    { _id: electionId, 'positions.id': positionId },
-    { $push: { 'positions.$.nominees': nominee } }
-  )
+
+  await elections.updateOne({ _id: electionId }, { $push: { nominees: nominee } })
   revalidatePath(`/admin/${electionId}`)
+  return nominee
 }
 
 export async function removeNominee(nomineeId: string, electionId: string) {
   const elections = await electionsCollection()
   await elections.updateOne(
     { _id: electionId },
-    { $pull: { 'positions.$[].nominees': { id: nomineeId } } }
+    { $pull: { nominees: { id: nomineeId } } }
   )
   revalidatePath(`/admin/${electionId}`)
 }

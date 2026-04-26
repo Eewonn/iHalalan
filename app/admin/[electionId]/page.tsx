@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { ElectionWithPositions, VoterToken } from '@/lib/types'
+import { ElectionWithNominees, VoterToken } from '@/lib/types'
 import ElectionSetupClient from '@/components/admin/ElectionSetupClient'
 import Link from 'next/link'
 import { ArrowLeft, BarChart2 } from 'lucide-react'
@@ -16,17 +16,12 @@ export default async function ElectionPage({
 
   if (!electionDoc) notFound()
 
-  const electionData: ElectionWithPositions = {
+  const electionData: ElectionWithNominees = {
     id: electionDoc._id,
     title: electionDoc.title,
     status: electionDoc.status,
     created_at: electionDoc.created_at,
-    positions: electionDoc.positions.map((p) => ({
-      ...p,
-      nominees: [...p.nominees].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ),
-    })),
+    nominees: [...electionDoc.nominees].sort((a, b) => a.sort_order - b.sort_order),
   }
 
   let tokens: VoterToken[] = []

@@ -2,8 +2,10 @@
 
 import { useState, useTransition, useEffect } from 'react'
 import { validateToken, submitBallot } from '@/app/vote/[electionId]/actions'
-import { ElectionWithPositions, BallotSelection } from '@/lib/types'
+import { ElectionWithNominees, BallotSelection, Nominee } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+const MAX_SELECTIONS = 15
 
 type Step = 'token' | 'ballot' | 'confirm' | 'done'
 
@@ -21,14 +23,14 @@ function StatusScreen({ icon, title, body }: { icon: React.ReactNode; title: str
   )
 }
 
-// ── Token Entry (Image 1) ─────────────────────────────────────────
+// ── Token Entry ───────────────────────────────────────────────────
 
 function TokenEntry({
   election,
   onSuccess,
 }: {
   election: { id: string; title: string; status: string }
-  onSuccess: (token: string, ballot: ElectionWithPositions) => void
+  onSuccess: (token: string, ballot: ElectionWithNominees) => void
 }) {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
@@ -63,7 +65,6 @@ function TokenEntry({
 
   return (
     <div className="flex flex-col items-center">
-      {/* Badge */}
       <span className="badge-peach mb-6">
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -71,7 +72,6 @@ function TokenEntry({
         Boses ng Bayan
       </span>
 
-      {/* Headline */}
       <div className="text-center mb-8 px-2">
         <h1 className="font-display text-4xl leading-snug font-medium text-[#1a1a1a]">
           Ang boto mo,<br />ang tinig mo sa{' '}
@@ -82,7 +82,6 @@ function TokenEntry({
         </p>
       </div>
 
-      {/* Card */}
       <div className="card w-full p-5">
         <p className="section-label mb-2">PIN / Token</p>
 
@@ -145,153 +144,119 @@ function TokenEntry({
   )
 }
 
-// ── Ballot Form (Image 3) ─────────────────────────────────────────
-
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  const colors = ['#f5a878', '#0a3d52', '#c0bdb8']
-  return (
-    <div className="flex items-center gap-2">
-      {Array.from({ length: total }).map((_, i) => (
-        <div
-          key={i}
-          className="step-segment"
-          style={{ backgroundColor: i < current ? colors[Math.min(i, colors.length - 1)] : '#e4e2dd' }}
-        />
-      ))}
-      <span className="text-xs text-[#6b7280] font-medium whitespace-nowrap ml-1">
-        Step {current} of {total}
-      </span>
-    </div>
-  )
-}
+// ── Candidate Card ────────────────────────────────────────────────
 
 function CandidateCard({
-  name, selected, onClick,
-}: { name: string; selected: boolean; onClick: () => void }) {
-  const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  nominee, selected, rank, onClick,
+}: { nominee: Nominee; selected: boolean; rank: number | null; onClick: () => void }) {
+  const initials = nominee.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
     <button
       onClick={onClick}
       className={cn('candidate-card w-full text-left', selected && 'selected')}
     >
-      {/* Photo area */}
       <div
-        className="w-full h-32 flex items-center justify-center relative overflow-hidden"
+        className="w-full h-28 flex items-center justify-center relative overflow-hidden"
         style={{
           background: selected
             ? 'linear-gradient(135deg, #0a3d52 0%, #0f5672 100%)'
             : 'linear-gradient(135deg, #d4d2cc 0%, #bfbdb7 100%)',
         }}
       >
-        <span
-          className={cn(
-            'font-display text-4xl font-semibold',
-            selected ? 'text-white/90' : 'text-white/70'
-          )}
-        >
+        <span className={cn('font-display text-4xl font-semibold', selected ? 'text-white/90' : 'text-white/70')}>
           {initials}
         </span>
-        {selected && (
+        {selected && rank !== null && (
           <div className="absolute top-2 right-2 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
-            <svg className="w-3.5 h-3.5 text-[#0a3d52]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+            <span className="text-[#0a3d52] text-xs font-bold">{rank}</span>
           </div>
         )}
       </div>
-      {/* Name */}
-      <div className="px-4 py-3">
-        <p className={cn('font-semibold text-sm', selected ? 'text-[#0a3d52]' : 'text-[#1a1a1a]')}>
-          {name}
+      <div className="px-3 py-2.5">
+        <p className={cn('font-semibold text-sm leading-snug', selected ? 'text-[#0a3d52]' : 'text-[#1a1a1a]')}>
+          {nominee.name}
         </p>
-        <p className="text-xs text-[#9ca3af] mt-0.5">Tap to select</p>
+        <p className="text-xs text-[#9ca3af] mt-0.5">{selected ? 'Selected' : 'Tap to select'}</p>
       </div>
     </button>
   )
 }
 
+// ── Ballot Form ───────────────────────────────────────────────────
+
 function BallotForm({
   ballot,
   onConfirm,
 }: {
-  ballot: ElectionWithPositions
+  ballot: ElectionWithNominees
   onConfirm: (selections: BallotSelection[]) => void
 }) {
-  const [selections, setSelections] = useState<Record<string, string>>({})
-  const [currentStep, setCurrentStep] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const maxSelections = Math.min(MAX_SELECTIONS, ballot.nominees.length)
+  const count = selected.size
 
-  const totalPositions = ballot.positions.length
-  const allComplete = Object.keys(selections).length === totalPositions
-  const pos = ballot.positions[currentStep]
-
-  const handleNext = () => {
-    if (currentStep < totalPositions - 1) setCurrentStep((s) => s + 1)
-    else {
-      const sel: BallotSelection[] = ballot.positions.map((p) => ({
-        position_id: p.id,
-        nominee_id: selections[p.id],
-      }))
-      onConfirm(sel)
-    }
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else if (next.size < maxSelections) {
+        next.add(id)
+      }
+      return next
+    })
   }
 
-  const canAdvance = !!selections[pos?.id]
+  const selectedOrder = [...selected]
+
+  const handleConfirm = () => {
+    onConfirm(selectedOrder.map((id) => ({ nominee_id: id })))
+  }
 
   return (
-    <div className="pb-4">
-      {/* Election meta */}
+    <div className="pb-32">
       <p className="section-label mb-1">General Election</p>
       <h2 className="font-display text-xl font-semibold text-[#0a3d52] mb-2">{ballot.title}</h2>
-      <p className="text-sm text-[#6b7280] leading-relaxed mb-4">
-        Your vote is your voice. Please select one candidate for each position to participate in this election.
+      <p className="text-sm text-[#6b7280] leading-relaxed mb-5">
+        Select your top {maxSelections} candidates from the list below.
       </p>
 
-      {/* Step indicator */}
-      <div className="mb-6">
-        <StepIndicator current={currentStep + 1} total={totalPositions} />
+      <div className="grid grid-cols-2 gap-3">
+        {ballot.nominees.map((nominee) => {
+          const isSelected = selected.has(nominee.id)
+          const rank = isSelected ? selectedOrder.indexOf(nominee.id) + 1 : null
+          return (
+            <CandidateCard
+              key={nominee.id}
+              nominee={nominee}
+              selected={isSelected}
+              rank={rank}
+              onClick={() => toggle(nominee.id)}
+            />
+          )
+        })}
       </div>
 
-      {/* Position card */}
-      {pos && (
-        <div>
-          <div className="card p-4 mb-4">
-            <h3 className="font-semibold text-[#1a1a1a] text-base mb-1">
-              Select your candidate for{' '}
-              <span className="text-[#0a3d52]">{pos.title}</span>
-            </h3>
-            <p className="text-xs text-[#9ca3af]">Only one selection is permitted for this category.</p>
-          </div>
-
-          {/* Candidates grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {pos.nominees.map((nominee) => (
-              <CandidateCard
-                key={nominee.id}
-                name={nominee.name}
-                selected={selections[pos.id] === nominee.id}
-                onClick={() => setSelections((prev) => ({ ...prev, [pos.id]: nominee.id }))}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-[#f0efec] border-t border-[#e4e2dd] px-5 py-4 z-10">
         <div className="max-w-lg mx-auto space-y-2">
+          {/* Selection counter */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-[#6b7280]">
+              <span className={cn('font-semibold', count === maxSelections ? 'text-[#0a3d52]' : 'text-[#1a1a1a]')}>{count}</span>
+              <span className="text-[#9ca3af]"> / {maxSelections} selected</span>
+            </span>
+            {count > 0 && count < maxSelections && (
+              <span className="text-xs text-[#9ca3af]">{maxSelections - count} more to go</span>
+            )}
+          </div>
           <button
-            onClick={handleNext}
-            disabled={!canAdvance}
+            onClick={handleConfirm}
+            disabled={count < maxSelections}
             className="btn-ink"
           >
-            {currentStep < totalPositions - 1 ? (
-              <>
-                Next Position
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </>
+            {count < maxSelections ? (
+              `Select ${maxSelections - count} more`
             ) : (
               <>
                 Review Ballot
@@ -301,11 +266,6 @@ function BallotForm({
               </>
             )}
           </button>
-          {currentStep > 0 && (
-            <button onClick={() => setCurrentStep((s) => s - 1)} className="btn-ghost">
-              Back
-            </button>
-          )}
         </div>
       </div>
     </div>
@@ -317,24 +277,19 @@ function BallotForm({
 function ConfirmationScreen({
   ballot, selections, onBack, onSubmit,
 }: {
-  ballot: ElectionWithPositions
+  ballot: ElectionWithNominees
   selections: BallotSelection[]
   onBack: () => void
   onSubmit: () => void
 }) {
   const [pending, startTransition] = useTransition()
-
-  const nomineeMap = ballot.positions.reduce<Record<string, string>>((acc, pos) => {
-    pos.nominees.forEach((n) => { acc[n.id] = n.name })
-    return acc
-  }, {})
-  const positionMap = ballot.positions.reduce<Record<string, string>>((acc, pos) => {
-    acc[pos.id] = pos.title
+  const nomineeMap = ballot.nominees.reduce<Record<string, string>>((acc, n) => {
+    acc[n.id] = n.name
     return acc
   }, {})
 
   return (
-    <div className="pb-4">
+    <div className="pb-28">
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#0a3d52] mb-5 transition-colors"
@@ -350,9 +305,11 @@ function ConfirmationScreen({
       <p className="text-sm text-[#6b7280] mb-5">Check your choices carefully. Submissions are final and cannot be changed.</p>
 
       <div className="card divide-y divide-[#f0efec] mb-6">
-        {selections.map((sel) => (
-          <div key={sel.position_id} className="px-5 py-4 flex items-center justify-between">
-            <span className="text-xs text-[#9ca3af] font-medium">{positionMap[sel.position_id]}</span>
+        {selections.map((sel, idx) => (
+          <div key={sel.nominee_id} className="px-5 py-3.5 flex items-center gap-3">
+            <span className="w-6 h-6 rounded-full bg-[#e8f0f4] text-[#0a3d52] text-xs font-bold flex items-center justify-center flex-shrink-0">
+              {idx + 1}
+            </span>
             <span className="font-semibold text-[#0a3d52] text-sm">{nomineeMap[sel.nominee_id]}</span>
           </div>
         ))}
@@ -380,7 +337,7 @@ function ConfirmationScreen({
   )
 }
 
-// ── Success (Image 4) ─────────────────────────────────────────────
+// ── Success ───────────────────────────────────────────────────────
 
 function SuccessScreen({ title }: { title: string }) {
   useEffect(() => {
@@ -397,7 +354,6 @@ function SuccessScreen({ title }: { title: string }) {
 
   return (
     <div className="flex flex-col items-center text-center pt-8 pb-6">
-      {/* Peach icon square */}
       <div className="w-20 h-20 bg-[#fdeee4] rounded-2xl flex items-center justify-center mb-6 shadow-sm">
         <div className="w-11 h-11 bg-[#1a1a1a] rounded-full flex items-center justify-center">
           <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -432,7 +388,6 @@ function SuccessScreen({ title }: { title: string }) {
         <button className="btn-ghost">Done</button>
       </div>
 
-      {/* Live dashboard teaser */}
       <div className="mt-8 w-full border-t border-[#e4e2dd] pt-6">
         <p className="section-label mb-3">Live Dashboard</p>
         <div className="card p-4 text-left">
@@ -454,7 +409,7 @@ export default function VoteClient({
 }) {
   const [step, setStep] = useState<Step>('token')
   const [token, setToken] = useState('')
-  const [ballot, setBallot] = useState<ElectionWithPositions | null>(null)
+  const [ballot, setBallot] = useState<ElectionWithNominees | null>(null)
   const [selections, setSelections] = useState<BallotSelection[]>([])
   const [submitError, setSubmitError] = useState('')
 

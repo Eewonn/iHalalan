@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ElectionWithPositions, Vote, VoterToken } from '@/lib/types'
+import { ElectionWithNominees, Vote, VoterToken } from '@/lib/types'
 import { closeVoting } from '@/app/admin/[electionId]/actions'
 import { cn } from '@/lib/utils'
+
+const MAX_WINNERS = 15
 
 type VoteCounts = Record<string, number>
 
@@ -14,17 +16,15 @@ function buildCounts(votes: Vote[]): VoteCounts {
   }, {} as VoteCounts)
 }
 
-function exportCSV(election: ElectionWithPositions, counts: VoteCounts, tokens: Pick<VoterToken, 'id' | 'used'>[]) {
-  const rows = ['Position,Nominee,Votes,Percentage']
-  election.positions.forEach((pos) => {
-    const total = pos.nominees.reduce((a, n) => a + (counts[n.id] || 0), 0)
-    pos.nominees.forEach((n) => {
-      const v = counts[n.id] || 0
-      rows.push(`"${pos.title}","${n.name}",${v},${total > 0 ? ((v / total) * 100).toFixed(1) : '0.0'}%`)
-    })
+function exportCSV(election: ElectionWithNominees, counts: VoteCounts, tokens: Pick<VoterToken, 'id' | 'used'>[]) {
+  const sorted = [...election.nominees].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
+  const rows = ['Rank,Nominee,Votes']
+  sorted.forEach((n, idx) => {
+    rows.push(`${idx + 1},"${n.name}",${counts[n.id] || 0}`)
   })
-  rows.push(`,,Total Tokens,${tokens.length}`)
-  rows.push(`,,Votes Cast,${tokens.filter((t) => t.used).length}`)
+  rows.push(`,,`)
+  rows.push(`Total Tokens,${tokens.length}`)
+  rows.push(`Ballots Cast,${tokens.filter((t) => t.used).length}`)
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -37,13 +37,13 @@ function exportCSV(election: ElectionWithPositions, counts: VoteCounts, tokens: 
 export default function ResultsClient({
   election, initialVotes, tokens,
 }: {
-  election: ElectionWithPositions
+  election: ElectionWithNominees
   initialVotes: Vote[]
   tokens: Pick<VoterToken, 'id' | 'used'>[]
 }) {
   const [counts, setCounts] = useState<VoteCounts>(buildCounts(initialVotes))
-  const [ballotsSubmitted, setBallotsSubmitted] = useState(
-    new Set(initialVotes.map((v) => v.token_id)).size
+  const [seenTokenIds, setSeenTokenIds] = useState<Set<string>>(
+    () => new Set(initialVotes.map((v) => v.token_id))
   )
   const [projector, setProjector] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -51,6 +51,7 @@ export default function ResultsClient({
   const isLive = election.status === 'voting'
   const totalTokens = tokens.length
   const usedTokens = tokens.filter((t) => t.used).length
+  const ballotsSubmitted = seenTokenIds.size
 
   useEffect(() => {
     if (!isLive) return
@@ -58,18 +59,19 @@ export default function ResultsClient({
     source.onmessage = (e) => {
       const vote = JSON.parse(e.data) as Vote
       setCounts((prev) => ({ ...prev, [vote.nominee_id]: (prev[vote.nominee_id] || 0) + 1 }))
-      setBallotsSubmitted((prev) => prev + 1 / election.positions.length)
+      setSeenTokenIds((prev) => new Set([...prev, vote.token_id]))
     }
     return () => source.close()
-  }, [election.id, election.positions.length, isLive])
+  }, [election.id, isLive])
 
-  const roundedBallots = Math.round(ballotsSubmitted)
+  const sorted = [...election.nominees].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
+  const topCount = counts[sorted[0]?.id] || 0
 
   // ── Projector view ────────────────────────────────────────────
   if (projector) {
     return (
       <div className="fixed inset-0 bg-[#0a3d52] overflow-auto z-50 p-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div>
               <div className="flex items-center gap-3 mb-1">
@@ -79,7 +81,7 @@ export default function ResultsClient({
                 <span className="font-display text-white/80 text-lg">iHalalan</span>
               </div>
               <h1 className="font-display text-4xl font-semibold text-white">{election.title}</h1>
-              <p className="text-white/60 text-lg mt-1">{roundedBallots} of {totalTokens} votes cast</p>
+              <p className="text-white/60 text-lg mt-1">{ballotsSubmitted} of {totalTokens} votes cast</p>
             </div>
             <div className="flex items-center gap-3">
               {isLive && (
@@ -96,41 +98,41 @@ export default function ResultsClient({
             </div>
           </div>
 
-          <div className="grid gap-6">
-            {election.positions.map((pos) => {
-              const posTotal = pos.nominees.reduce((a, n) => a + (counts[n.id] || 0), 0)
-              const sorted = [...pos.nominees].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
-              return (
-                <div key={pos.id} className="bg-white/10 rounded-2xl p-6">
-                  <h2 className="font-display text-2xl font-semibold text-white mb-5">{pos.title}</h2>
-                  <div className="space-y-4">
-                    {sorted.map((nominee, idx) => {
-                      const v = counts[nominee.id] || 0
-                      const pct = posTotal > 0 ? Math.round((v / posTotal) * 100) : 0
-                      const leading = idx === 0 && v > 0
-                      return (
-                        <div key={nominee.id}>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={cn('text-xl font-semibold', leading ? 'text-white' : 'text-white/70')}>
-                              {nominee.name}
-                              {leading && <span className="ml-2 text-sm text-[#f5a878] font-normal">leading</span>}
-                            </span>
-                            <span className="text-3xl font-display font-semibold text-white">{v}</span>
-                          </div>
-                          <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-700"
-                              style={{ width: `${pct}%`, backgroundColor: leading ? '#f5a878' : 'rgba(255,255,255,0.3)' }}
-                            />
-                          </div>
-                          <p className="text-right text-white/40 text-sm mt-1">{pct}%</p>
-                        </div>
-                      )
-                    })}
+          <div className="bg-white/10 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-2xl font-semibold text-white">Top {MAX_WINNERS} Results</h2>
+              <span className="text-white/50 text-sm">{election.nominees.length} nominees</span>
+            </div>
+            <div className="space-y-3">
+              {sorted.map((nominee, idx) => {
+                const v = counts[nominee.id] || 0
+                const pct = topCount > 0 ? Math.round((v / topCount) * 100) : 0
+                const isWinner = idx < MAX_WINNERS && v > 0
+                const isTop = idx === 0 && v > 0
+                return (
+                  <div key={nominee.id} className={cn(isWinner ? 'opacity-100' : 'opacity-40')}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-3">
+                        <span className={cn('w-7 text-center text-sm font-bold', isTop ? 'text-[#f5a878]' : 'text-white/50')}>
+                          #{idx + 1}
+                        </span>
+                        <span className={cn('text-lg font-semibold', isTop ? 'text-white' : 'text-white/80')}>
+                          {nominee.name}
+                          {isTop && <span className="ml-2 text-sm text-[#f5a878] font-normal">leading</span>}
+                        </span>
+                      </div>
+                      <span className="text-3xl font-display font-semibold text-white">{v}</span>
+                    </div>
+                    <div className="h-2.5 bg-white/10 rounded-full overflow-hidden ml-10">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, backgroundColor: isTop ? '#f5a878' : isWinner ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)' }}
+                      />
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -140,7 +142,6 @@ export default function ResultsClient({
   // ── Normal view ───────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      {/* Header */}
       <div>
         <p className="section-label mb-1">Election Results</p>
         <div className="flex items-start justify-between flex-wrap gap-3">
@@ -163,7 +164,7 @@ export default function ResultsClient({
         <div className="flex items-center justify-between">
           <div>
             <p className="section-label text-white/60 mb-1">Ballots Cast</p>
-            <p className="font-display text-3xl font-semibold text-white">{roundedBallots}</p>
+            <p className="font-display text-3xl font-semibold text-white">{ballotsSubmitted}</p>
             <p className="text-white/60 text-xs mt-0.5">of {totalTokens} registered voters</p>
           </div>
           <div className="text-right">
@@ -173,7 +174,6 @@ export default function ResultsClient({
             </p>
           </div>
         </div>
-        {/* Progress bar */}
         <div className="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
           <div
             className="h-full bg-[#f5a878] rounded-full transition-all duration-500"
@@ -214,56 +214,69 @@ export default function ResultsClient({
         )}
       </div>
 
-      {/* Results per position */}
-      <div className="space-y-4">
-        {election.positions.map((pos) => {
-          const posTotal = pos.nominees.reduce((a, n) => a + (counts[n.id] || 0), 0)
-          const sorted = [...pos.nominees].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0))
-          return (
-            <div key={pos.id} className="card p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-[#0a3d52] text-sm">{pos.title}</h2>
-                <span className="text-xs text-[#9ca3af]">{posTotal} votes</span>
-              </div>
-              <div className="space-y-3">
-                {sorted.map((nominee, idx) => {
-                  const v = counts[nominee.id] || 0
-                  const pct = posTotal > 0 ? Math.round((v / posTotal) * 100) : 0
-                  const leading = idx === 0 && v > 0
-                  return (
-                    <div key={nominee.id}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          {leading && election.status === 'closed' && (
-                            <svg className="w-3.5 h-3.5 text-[#f5a878] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                            </svg>
-                          )}
-                          <span className={cn('text-sm', leading ? 'font-semibold text-[#1a1a1a]' : 'text-[#6b7280]')}>
-                            {nominee.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xs text-[#9ca3af]">{pct}%</span>
-                          <span className="text-sm font-semibold text-[#1a1a1a] w-5 text-right">{v}</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-[#f0efec] rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%`, backgroundColor: leading ? '#0a3d52' : '#c0bdb8' }}
-                        />
+      {/* Ranked results */}
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-[#0a3d52] text-sm">Ranked Results</h2>
+          <span className="text-xs text-[#9ca3af]">{election.nominees.length} nominees · top {MAX_WINNERS} elected</span>
+        </div>
+
+        <div className="space-y-2.5">
+          {sorted.map((nominee, idx) => {
+            const v = counts[nominee.id] || 0
+            const pct = topCount > 0 ? Math.round((v / topCount) * 100) : 0
+            const isWinner = idx < MAX_WINNERS
+            const isTop = idx === 0 && v > 0
+            const cutoff = idx === MAX_WINNERS
+
+            return (
+              <div key={nominee.id}>
+                {cutoff && (
+                  <div className="flex items-center gap-2 my-3">
+                    <div className="flex-1 h-px bg-[#e4e2dd]" />
+                    <span className="text-xs text-[#9ca3af] whitespace-nowrap">below cut-off</span>
+                    <div className="flex-1 h-px bg-[#e4e2dd]" />
+                  </div>
+                )}
+                <div className={cn(!isWinner && 'opacity-50')}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className={cn('w-5 text-xs font-semibold text-right', isTop ? 'text-[#f5a878]' : isWinner ? 'text-[#0a3d52]' : 'text-[#c0bdb8]')}>
+                        #{idx + 1}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {isTop && election.status === 'closed' && (
+                          <svg className="w-3.5 h-3.5 text-[#f5a878] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                          </svg>
+                        )}
+                        <span className={cn('text-sm', isTop ? 'font-semibold text-[#1a1a1a]' : isWinner ? 'text-[#1a1a1a]' : 'text-[#6b7280]')}>
+                          {nominee.name}
+                        </span>
                       </div>
                     </div>
-                  )
-                })}
-                {posTotal === 0 && (
-                  <p className="text-sm text-[#c0bdb8] py-2">No votes yet</p>
-                )}
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs text-[#9ca3af]">{pct}%</span>
+                      <span className="text-sm font-semibold text-[#1a1a1a] w-5 text-right">{v}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-[#f0efec] rounded-full overflow-hidden ml-7">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: isTop ? '#0a3d52' : isWinner ? '#c0bdb8' : '#e4e2dd',
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+          {sorted.every((n) => !counts[n.id]) && (
+            <p className="text-sm text-[#c0bdb8] py-4 text-center">No votes yet</p>
+          )}
+        </div>
       </div>
     </div>
   )
