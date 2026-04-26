@@ -1,20 +1,24 @@
-import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { electionsCollection } from '@/lib/mongo-collections'
+import { randomUUID } from 'crypto'
 
 async function createElection(formData: FormData) {
   'use server'
   const title = (formData.get('title') as string).trim()
   if (!title) return
 
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('elections')
-    .insert({ title })
-    .select('id')
-    .single()
+  const elections = await electionsCollection()
+  const id = randomUUID()
+  await elections.insertOne({
+    _id: id,
+    title,
+    status: 'setup',
+    created_at: new Date().toISOString(),
+    candidates: [],
+  })
 
-  if (data) redirect(`/admin/${data.id}`)
+  redirect(`/admin/${id}`)
 }
 
 export default function NewElectionPage() {

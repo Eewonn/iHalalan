@@ -1,47 +1,38 @@
 'use server'
 
-import { createClient } from '@/lib/supabase-server'
-import { ElectionWithPositions, BallotSelection } from '@/lib/types'
+import { electionsCollection, voterTokensCollection, votesCollection, VoterTokenDoc, VoteDoc } from '@/lib/mongo-collections'
+import { getClient } from '@/lib/mongo'
+import { ElectionWithCandidates, BallotSelection } from '@/lib/types'
+import { randomUUID } from 'crypto'
 
 export async function validateToken(
   electionId: string,
   token: string
-): Promise<{ error?: string; ballot?: ElectionWithPositions }> {
-  const supabase = await createClient()
+): Promise<{ error?: string; ballot?: ElectionWithCandidates }> {
+  const elections = await electionsCollection()
+  const voterTokens = await voterTokensCollection()
 
-  // Check election status
-  const { data: election, error: electionError } = await supabase
-    .from('elections')
-    .select(`*, positions(*, nominees(*))`)
-    .eq('id', electionId)
-    .order('sort_order', { referencedTable: 'positions' })
-    .single()
+  const electionDoc = await elections.findOne({ _id: electionId })
+  if (!electionDoc) return { error: 'Election not found.' }
+  if (electionDoc.status === 'setup') return { error: 'Voting has not opened yet.' }
+  if (electionDoc.status === 'closed') return { error: 'Voting has closed.' }
 
-  if (electionError || !election) return { error: 'Election not found.' }
-  if (election.status === 'setup') return { error: 'Voting has not opened yet.' }
-  if (election.status === 'closed') return { error: 'Voting has closed.' }
-
-  // Check token
-  const { data: tokenRow, error: tokenError } = await supabase
-    .from('voter_tokens')
-    .select('id, used')
-    .eq('election_id', electionId)
-    .eq('token', token.trim())
-    .single()
-
-  if (tokenError || !tokenRow) return { error: 'Invalid token. Check your slip and try again.' }
+  const tokenRow = await voterTokens.findOne(
+    { election_id: electionId, token: token.trim() },
+    { projection: { _id: 1, used: 1 } }
+  )
+  if (!tokenRow) return { error: 'Invalid token. Check your slip and try again.' }
   if (tokenRow.used) return { error: 'This token has already been used.' }
 
-  // Sort nominees by created_at
-  const ballot = {
-    ...election,
-    positions: election.positions.map((p: { nominees: { created_at: string }[] }) => ({
-      ...p,
-      nominees: [...p.nominees].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      ),
-    })),
-  } as ElectionWithPositions
+  const ballot: ElectionWithCandidates = {
+    id: electionDoc._id,
+    title: electionDoc.title,
+    status: electionDoc.status,
+    created_at: electionDoc.created_at,
+    candidates: [...electionDoc.candidates].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ),
+  }
 
   return { ballot }
 }
@@ -50,22 +41,54 @@ export async function submitBallot(
   token: string,
   selections: BallotSelection[]
 ): Promise<{ error?: string; success?: boolean }> {
-  const supabase = await createClient()
+  const client = await getClient()
+  const db = client.db(process.env.MONGODB_DB!)
+  const session = client.startSession()
 
-  const { data, error } = await supabase.rpc('submit_ballot', {
-    p_token: token.trim(),
-    p_selections: selections,
-  })
-
-  if (error) return { error: error.message }
-  if (!data.success) {
-    const messages: Record<string, string> = {
-      invalid_token: 'Invalid token.',
-      token_used: 'This token has already been used.',
-      concurrent_request: 'Your ballot was already submitted. Refresh to confirm.',
-    }
-    return { error: messages[data.error] ?? 'Something went wrong. Please try again.' }
+  const messages: Record<string, string> = {
+    invalid_token: 'Invalid token.',
+    token_used: 'This token has already been used.',
+    concurrent_request: 'Your ballot was already submitted. Refresh to confirm.',
   }
 
-  return { success: true }
+  try {
+    await session.withTransaction(async () => {
+      const vtCol = db.collection<VoterTokenDoc>('voter_tokens')
+      const vCol = db.collection<VoteDoc>('votes')
+
+      const tokenDoc = await vtCol.findOneAndUpdate(
+        { token: token.trim(), used: false },
+        { $set: { used: true, used_at: new Date().toISOString() } },
+        { session, returnDocument: 'before' }
+      )
+
+      if (!tokenDoc) {
+        const exists = await vtCol.findOne({ token: token.trim() }, { session })
+        throw new Error(exists ? 'token_used' : 'invalid_token')
+      }
+
+      const now = new Date().toISOString()
+      await vCol.insertMany(
+        selections.map((sel) => ({
+          _id: randomUUID(),
+          token_id: tokenDoc._id,
+          election_id: tokenDoc.election_id,
+          candidate_id: sel.candidate_id,
+          submitted_at: now,
+        })),
+        { session }
+      )
+    })
+
+    return { success: true }
+  } catch (err) {
+    const msg = (err as Error).message
+    if (msg in messages) return { error: messages[msg] }
+    if (msg.includes('WriteConflict') || msg.includes('TransientTransactionError')) {
+      return { error: messages.concurrent_request }
+    }
+    return { error: 'Something went wrong. Please try again.' }
+  } finally {
+    await session.endSession()
+  }
 }

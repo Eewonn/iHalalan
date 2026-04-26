@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase-server'
 import { notFound } from 'next/navigation'
 import VoteClient from '@/components/vote/VoteClient'
+import { electionsCollection } from '@/lib/mongo-collections'
 
 export default async function VotePage({
   params,
@@ -8,15 +8,15 @@ export default async function VotePage({
   params: Promise<{ electionId: string }>
 }) {
   const { electionId } = await params
-  const supabase = await createClient()
+  const elections = await electionsCollection()
+  const doc = await elections.findOne(
+    { _id: electionId },
+    { projection: { _id: 1, title: 1, status: 1 } }
+  )
 
-  const { data: election } = await supabase
-    .from('elections')
-    .select('id, title, status')
-    .eq('id', electionId)
-    .single()
+  if (!doc) notFound()
 
-  if (!election) notFound()
+  const election = { id: doc._id, title: doc.title, status: doc.status }
 
   return (
     <div className="min-h-screen bg-[#f0efec] pb-28 flex flex-col">
