@@ -22,9 +22,9 @@ async function main() {
 
   const votes = db.collection('votes')
   await votes.createIndex({ election_id: 1 })
-  await votes.createIndex({ election_id: 1, position_id: 1, nominee_id: 1 })
+  await votes.createIndex({ election_id: 1, nominee_id: 1 })
   await votes.createIndex({ election_id: 1, submitted_at: 1 })
-  console.log('votes: created indexes on election_id, (election_id, position_id, nominee_id), (election_id, submitted_at)')
+  console.log('votes: created indexes on election_id, (election_id, nominee_id), (election_id, submitted_at)')
 
   await client.close()
   console.log('\nAll indexes created successfully.')

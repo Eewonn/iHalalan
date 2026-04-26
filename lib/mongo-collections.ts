@@ -1,13 +1,11 @@
 import { Collection, WithId } from 'mongodb'
 import { getDb } from './mongo'
-import { Election, VoterToken, Vote, PositionWithNominees } from './types'
+import { Election, Nominee, VoterToken, Vote } from './types'
 
 // Document shapes stored in MongoDB (use _id as the UUID string)
 export type ElectionDoc = Omit<Election, 'id'> & {
   _id: string
-  positions: (Omit<PositionWithNominees, 'nominees'> & {
-    nominees: Array<{ id: string; position_id: string; name: string; created_at: string }>
-  })[]
+  nominees: Array<Omit<Nominee, 'id'> & { id: string }>
 }
 
 export type VoterTokenDoc = Omit<VoterToken, 'id'> & { _id: string }

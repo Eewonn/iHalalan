@@ -7,18 +7,15 @@ export interface Election {
   created_at: string
 }
 
-export interface Position {
-  id: string
-  election_id: string
-  title: string
-  sort_order: number
-  created_at: string
-}
-
 export interface Nominee {
   id: string
-  position_id: string
+  election_id: string
   name: string
+  image_url?: string
+  bio?: string
+  background?: string
+  platform?: string
+  sort_order: number
   created_at: string
 }
 
@@ -35,21 +32,15 @@ export interface Vote {
   id: string
   token_id: string
   election_id: string
-  position_id: string
   nominee_id: string
   submitted_at: string
 }
 
-export interface PositionWithNominees extends Position {
+export interface ElectionWithNominees extends Election {
   nominees: Nominee[]
-}
-
-export interface ElectionWithPositions extends Election {
-  positions: PositionWithNominees[]
 }
 
 // Vote selection during ballot filling
 export interface BallotSelection {
-  position_id: string
   nominee_id: string
 }
