@@ -146,10 +146,19 @@ function TokenEntry({
 
 // ── Candidate Card ────────────────────────────────────────────────
 
+function toDirectImageUrl(url: string): string {
+  const match = url.match(/drive\.google\.com\/file\/d\/([^/]+)/)
+  if (match) return `https://lh3.googleusercontent.com/d/${match[1]}`
+  return url
+}
+
 function CandidateCard({
-  name, selected, disabled, onClick,
-}: { name: string; selected: boolean; disabled: boolean; onClick: () => void }) {
+  name, photoUrl, selected, disabled, onClick,
+}: { name: string; photoUrl?: string; selected: boolean; disabled: boolean; onClick: () => void }) {
   const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+  const [imgError, setImgError] = useState(false)
+  const src = photoUrl ? toDirectImageUrl(photoUrl) : null
+  const showImage = src && !imgError
 
   return (
     <button
@@ -160,14 +169,26 @@ function CandidateCard({
       <div
         className="w-full h-32 flex items-center justify-center relative overflow-hidden"
         style={{
-          background: selected
-            ? 'linear-gradient(135deg, #0a3d52 0%, #0f5672 100%)'
-            : 'linear-gradient(135deg, #d4d2cc 0%, #bfbdb7 100%)',
+          background: showImage
+            ? undefined
+            : selected
+              ? 'linear-gradient(135deg, #0a3d52 0%, #0f5672 100%)'
+              : 'linear-gradient(135deg, #d4d2cc 0%, #bfbdb7 100%)',
         }}
       >
-        <span className={cn('font-display text-4xl font-semibold', selected ? 'text-white/90' : 'text-white/70')}>
-          {initials}
-        </span>
+        {showImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt={name}
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover object-top"
+          />
+        ) : (
+          <span className={cn('font-display text-4xl font-semibold', selected ? 'text-white/90' : 'text-white/70')}>
+            {initials}
+          </span>
+        )}
         {selected && (
           <div className="absolute top-2 right-2 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-sm">
             <svg className="w-3.5 h-3.5 text-[#0a3d52]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -233,6 +254,7 @@ function BallotForm({
           <CandidateCard
             key={c.id}
             name={c.name}
+            photoUrl={c.photo_url}
             selected={selected.has(c.id)}
             disabled={!selected.has(c.id) && selected.size >= limit}
             onClick={() => toggle(c.id)}

@@ -14,36 +14,47 @@ import { Plus, Trash2, ChevronDown, ChevronUp, ExternalLink, Copy, Check } from 
 
 function AddCandidateInput({ electionId, onAdd }: { electionId: string; onAdd: (c: Candidate) => void }) {
   const [name, setName] = useState('')
+  const [photoUrl, setPhotoUrl] = useState('')
   const [pending, startTransition] = useTransition()
 
   const submit = () => {
     const trimmed = name.trim()
     if (!trimmed) return
     startTransition(async () => {
-      const c = await addCandidate(electionId, trimmed)
+      const c = await addCandidate(electionId, trimmed, photoUrl.trim() || undefined)
       if (c) onAdd(c)
       setName('')
+      setPhotoUrl('')
     })
   }
 
   return (
-    <div className="flex gap-2 pt-3 border-t border-[#f0efec]">
+    <div className="pt-3 border-t border-[#f0efec] space-y-2">
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
         placeholder="Candidate name"
         disabled={pending}
-        className="flex-1 px-3 py-2 text-sm rounded-lg border border-[#e4e2dd] bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20 focus:border-[#0a3d52] disabled:opacity-50 placeholder:text-[#c0bdb8]"
+        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e4e2dd] bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20 focus:border-[#0a3d52] disabled:opacity-50 placeholder:text-[#c0bdb8]"
       />
-      <button
-        onClick={submit}
-        disabled={!name.trim() || pending}
-        className="px-3 py-2 bg-[#0a3d52] hover:bg-[#072e3d] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Add
-      </button>
+      <div className="flex gap-2">
+        <input
+          value={photoUrl}
+          onChange={(e) => setPhotoUrl(e.target.value)}
+          placeholder="Google Drive photo link (optional)"
+          disabled={pending}
+          className="flex-1 px-3 py-2 text-sm rounded-lg border border-[#e4e2dd] bg-[#fafaf8] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20 focus:border-[#0a3d52] disabled:opacity-50 placeholder:text-[#c0bdb8]"
+        />
+        <button
+          onClick={submit}
+          disabled={!name.trim() || pending}
+          className="px-3 py-2 bg-[#0a3d52] hover:bg-[#072e3d] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1 flex-shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add
+        </button>
+      </div>
     </div>
   )
 }

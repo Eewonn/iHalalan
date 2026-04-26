@@ -6,12 +6,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { randomUUID } from 'crypto'
 
-export async function addCandidate(electionId: string, name: string) {
+export async function addCandidate(electionId: string, name: string, photo_url?: string) {
   const elections = await electionsCollection()
   const candidate = {
     id: randomUUID(),
     election_id: electionId,
     name,
+    ...(photo_url ? { photo_url } : {}),
     created_at: new Date().toISOString(),
   }
   await elections.updateOne({ _id: electionId }, { $push: { candidates: candidate } })

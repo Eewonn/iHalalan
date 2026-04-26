@@ -11,6 +11,7 @@ export interface Candidate {
   id: string
   election_id: string
   name: string
+  photo_url?: string
   created_at: string
 }
 
