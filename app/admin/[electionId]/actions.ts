@@ -30,7 +30,7 @@ export async function removeCandidate(candidateId: string, electionId: string) {
 }
 
 export async function openVoting(electionId: string, tokenCount: number) {
-  if (tokenCount < 1 || tokenCount > 500) return { error: 'Token count must be between 1 and 500' }
+  if (tokenCount < 1 || tokenCount > 750) return { error: 'Token count must be between 1 and 750' }
 
   const elections = await electionsCollection()
   const voterTokens = await voterTokensCollection()
@@ -63,7 +63,7 @@ export async function openVoting(electionId: string, tokenCount: number) {
 }
 
 export async function generateMoreTokens(electionId: string, count: number) {
-  if (count < 1 || count > 200) return { error: 'Count must be between 1 and 200' }
+  if (count < 1 || count > 750) return { error: 'Count must be between 1 and 750' }
 
   const voterTokens = await voterTokensCollection()
   const tokens = generateTokens(count)

@@ -128,7 +128,7 @@ function OpenVotingModal({ electionId, onClose }: { electionId: string; onClose:
         <div className="mb-4">
           <p className="section-label mb-1.5">Number of Voters</p>
           <input
-            type="number" min={1} max={500} value={count}
+            type="number" min={1} max={750} value={count}
             onChange={(e) => { setCount(Number(e.target.value)); setError('') }}
             className="w-full px-4 py-3 rounded-lg border border-[#e4e2dd] bg-white text-center text-2xl font-display font-semibold text-[#0a3d52] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20"
           />
@@ -196,15 +196,18 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
       </div>
 
       <div className="grid grid-cols-4 gap-1.5 mb-3">
-        {displayed.map((t) => (
+        {displayed.map((t, i) => (
           <span
             key={t.id}
             className={cn(
-              'text-center font-mono text-xs px-1.5 py-1.5 rounded-lg',
-              t.used ? 'bg-[#e8e6e1] text-[#c0bdb8] line-through' : 'bg-[#e8f0f4] text-[#0a3d52] font-semibold'
+              'flex flex-col items-center font-mono text-xs px-1.5 py-1.5 rounded-lg',
+              t.used ? 'bg-[#e8e6e1] text-[#c0bdb8] line-through' : 'bg-[#e8f0f4] text-[#0a3d52]'
             )}
           >
-            {t.token}
+            <span className={cn('text-[9px] leading-none mb-0.5', t.used ? 'text-[#c0bdb8]' : 'text-[#0a3d52]/40')}>
+              #{i + 1}
+            </span>
+            <span className="font-semibold">{t.token}</span>
           </span>
         ))}
       </div>
@@ -218,7 +221,7 @@ function TokenPanel({ tokens, electionId }: { tokens: VoterToken[]; electionId: 
 
       <div className="border-t border-[#f0efec] pt-4 flex gap-2 items-center">
         <input
-          type="number" min={1} max={200} value={addCount}
+          type="number" min={1} max={750} value={addCount}
           onChange={(e) => setAddCount(Number(e.target.value))}
           className="w-16 px-2 py-2 text-sm rounded-lg border border-[#e4e2dd] focus:outline-none focus:ring-2 focus:ring-[#0a3d52]/20 text-center"
         />
